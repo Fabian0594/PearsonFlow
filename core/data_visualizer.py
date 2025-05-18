@@ -8,6 +8,8 @@ import numpy as np
 from datetime import datetime
 import os
 import sys
+from core.chart_factory import ChartFactory
+from core.data_repository import DataRepository
 
 class DataVisualizerGUI:
     # Paleta de colores
@@ -21,13 +23,30 @@ class DataVisualizerGUI:
         'chart_colors': ['#2ecc71', '#3498db', '#e74c3c', '#f1c40f', '#9b59b6', '#1abc9c', '#34495e', '#d35400']
     }
 
-    def __init__(self, dataframe: pd.DataFrame):
-        self.dataframe = dataframe
+    def __init__(self, file_path: str):
+        """
+        Inicializar el visualizador de datos.
+        
+        Args:
+            file_path: Ruta al archivo CSV a visualizar
+        """
+        # Inicializar repositorio de datos
+        self.data_repository = DataRepository()
+        
+        # Cargar datos
+        try:
+            self.dataframe, self.metadata = self.data_repository.load_csv(file_path)
+            self.file_path = file_path
+        except Exception as e:
+            raise ValueError(f"Error al cargar el archivo: {str(e)}")
+        
+        # Iniciar la interfaz
         self.setup_window()
         self.setup_style()
         self.create_widgets()
         self.current_canvas = None
         self.current_toolbar = None
+        
         # Actualizar el gráfico automáticamente al inicio
         self.root.after(100, self.show_chart)
 
@@ -144,11 +163,13 @@ class DataVisualizerGUI:
         
         # Tipo de gráfico
         ttk.Label(controls, text="Tipo de Gráfico:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
-        self.chart_types = ["Barras", "Líneas", "Pastel", "Dispersión"]
+        
+        # Obtener tipos de gráficos disponibles desde la fábrica
+        self.chart_types = ChartFactory.get_available_chart_types()
         
         self.chart_combo = ttk.Combobox(controls, width=15)
         self.chart_combo['values'] = self.chart_types
-        self.chart_combo.current(0)  # Establecer "Barras" como valor inicial
+        self.chart_combo.current(0)  # Establecer primer tipo como valor inicial
         self.chart_combo.grid(row=0, column=1, sticky="w", padx=5, pady=5)
         
         # Asociar el cambio de selección con un callback
@@ -229,9 +250,9 @@ class DataVisualizerGUI:
         stats_frame = ttk.Frame(self.data_frame, padding="5")
         stats_frame.pack(fill="x", expand=False, padx=5, pady=5)
         
-        # Mostrar información resumida del DataFrame
-        num_rows = len(self.dataframe)
-        num_cols = len(self.dataframe.columns)
+        # Mostrar información resumida del DataFrame usando los metadatos
+        num_rows = self.metadata['rows']
+        num_cols = self.metadata['columns']
         ttk.Label(stats_frame, text=f"Filas: {num_rows} | Columnas: {num_cols}", 
                  style="Subtitle.TLabel").pack(side="left")
 
@@ -239,199 +260,6 @@ class DataVisualizerGUI:
         """Manejar el evento de cambio de tipo de gráfico."""
         selected_type = self.chart_combo.get()
         self.status_text.set(f"Tipo de gráfico cambiado a: {selected_type}")
-
-    def prepare_data_for_plot(self):
-        """Preparar datos para el gráfico."""
-        try:
-            # Validar y obtener número de puntos a mostrar
-            try:
-                n = int(self.n_points.get())
-                if n <= 0:
-                    raise ValueError("El número de puntos debe ser mayor que 0")
-            except ValueError:
-                messagebox.showerror("Error", "Por favor ingrese un número válido de puntos")
-                return None, None, None
-            
-            # Preparar columna X
-            x_col = self.x_combo.get()
-            df = self.dataframe.tail(n).copy()
-            
-            if not x_col:
-                # Si no se selecciona columna X, usar el índice
-                x_values = range(len(df))
-                x_col = "Índice"
-            else:
-                # Convertir a datetime si es posible
-                try:
-                    if df[x_col].dtype == 'object':  # Solo intentar convertir si es string/object
-                        df[x_col] = pd.to_datetime(df[x_col], errors='ignore')
-                    x_values = df[x_col]
-                except Exception:
-                    x_values = df[x_col]
-            
-            # Obtener columnas numéricas para Y de manera más eficiente
-            numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
-            if x_col in numeric_cols and x_col != "Índice":
-                numeric_cols = numeric_cols.drop(x_col)
-            
-            if len(numeric_cols) == 0:
-                messagebox.showerror("Error", "No hay columnas numéricas disponibles para graficar")
-                return None, None, None
-                
-            return x_values, df[numeric_cols], x_col
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Error al preparar datos: {str(e)}")
-            return None, None, None
-
-    def adjust_y_axis(self, ax, y_data):
-        """Ajustar el rango del eje Y basado en los datos."""
-        try:
-            ymin = y_data.min().min()
-            ymax = y_data.max().max()
-            
-            # Evitar división por cero o valores muy cercanos a cero
-            if abs(ymax - ymin) < 1e-10:
-                if abs(ymax) < 1e-10:  # Ambos cercanos a cero
-                    ax.set_ylim([-0.1, 0.1])
-                else:  # Mismo valor pero no cero
-                    ax.set_ylim([ymin * 0.9 if ymin > 0 else ymin * 1.1, 
-                                ymax * 1.1 if ymax > 0 else ymax * 0.9])
-                return
-            
-            # Ajuste normal
-            if ymax <= 1:
-                ax.set_ylim([ymin - 0.1 * abs(ymin) if ymin > 0 else ymin * 1.1 if ymin < 0 else 0, 
-                            ymax + 0.1])
-            else:
-                ax.set_ylim([ymin - 0.1 * abs(ymin) if ymin > 0 else ymin * 1.1 if ymin < 0 else 0, 
-                            ymax * 1.1])
-        except Exception:
-            # Si algo falla, dejar que matplotlib ajuste automáticamente
-            pass
-
-    def plot_bar_chart(self, ax, x_values, y_data, x_col, colors):
-        """Crear gráfico de barras."""
-        x = np.arange(len(x_values))  # Posiciones de las barras
-        width = 0.8 / len(y_data.columns)  # Ancho de las barras
-        
-        for i, column in enumerate(y_data.columns):
-            ax.bar(x + i * width, y_data[column], 
-                  width,
-                  label=column, 
-                  alpha=0.8,
-                  color=colors[i % len(colors)])
-        
-        # Configurar eje X
-        if isinstance(x_values, pd.DatetimeIndex):
-            ax.set_xticks(x + width * (len(y_data.columns) - 1) / 2)
-            ax.set_xticklabels([d.strftime('%Y-%m-%d') for d in x_values])
-        else:
-            ax.set_xticks(x + width * (len(y_data.columns) - 1) / 2)
-            ax.set_xticklabels(x_values)
-        
-        self.adjust_y_axis(ax, y_data)
-        return ax
-
-    def plot_line_chart(self, ax, x_values, y_data, colors):
-        """Crear gráfico de líneas."""
-        for i, column in enumerate(y_data.columns):
-            ax.plot(x_values, y_data[column], 
-                   label=column, 
-                   marker='o', 
-                   markersize=4,
-                   linewidth=2,
-                   color=colors[i % len(colors)])
-        
-        self.adjust_y_axis(ax, y_data)
-        return ax
-
-    def plot_scatter_chart(self, ax, x_values, y_data, colors):
-        """Crear gráfico de dispersión."""
-        for i, column in enumerate(y_data.columns):
-            ax.scatter(x_values, y_data[column], 
-                     label=column, 
-                     alpha=0.8,
-                     s=50,  # tamaño de punto
-                     color=colors[i % len(colors)])
-        
-        self.adjust_y_axis(ax, y_data)
-        return ax
-
-    def plot_pie_chart(self, ax, y_data, colors):
-        """Crear gráfico de pastel."""
-        # Para gráfico de pastel, usar solo la primera columna numérica
-        column = y_data.columns[0]
-        values = y_data[column].abs()  # Usar valores absolutos
-        total = values.sum()
-        
-        if total == 0:
-            messagebox.showerror("Error", "No hay datos válidos para el gráfico de pastel")
-            return None
-            
-        # Agrupar valores pequeños en "Otros"
-        threshold = 0.05  # 5% del total
-        small_mask = values/total < threshold
-        
-        if small_mask.any():
-            large_values = values[~small_mask]
-            otros = pd.Series({'Otros': values[small_mask].sum()})
-            values = pd.concat([large_values, otros])
-        
-        wedges, texts, autotexts = ax.pie(
-            values, 
-            labels=values.index,
-            autopct='%1.1f%%',
-            colors=colors[:len(values)],
-            explode=[0.05] * len(values),  # Separar las piezas
-            shadow=True,  # Sombra
-            startangle=90,  # Iniciar desde arriba
-            textprops={'fontsize': 9, 'fontweight': 'bold'}
-        )
-        ax.set_ylabel("")
-        ax.set_title(f"Distribución de {column}", fontweight='bold', pad=20)
-        return ax
-
-    def configure_general_chart(self, ax, chart_type, x_col):
-        """Configurar elementos generales del gráfico."""
-        if chart_type != "Pastel":
-            # Configurar título y etiquetas
-            chart_title = {
-                "Barras": f"Gráfico de Barras - {x_col}",
-                "Líneas": f"Gráfico de Líneas - {x_col}",
-                "Dispersión": f"Gráfico de Dispersión - {x_col}"
-            }.get(chart_type, f"Gráfico de {chart_type}")
-            
-            ax.set_title(chart_title, fontweight='bold', pad=20)
-            ax.set_xlabel(x_col, fontsize=10, fontweight='bold')
-            ax.set_ylabel("Valor", fontsize=10, fontweight='bold')
-            
-            # Ajustar espaciado de las etiquetas
-            ax.xaxis.labelpad = 10
-            ax.yaxis.labelpad = 10
-            
-            # Rotar etiquetas si está activado
-            if self.rotate_labels.get():
-                plt.xticks(rotation=45, ha='right')
-            
-            # Mostrar cuadrícula si está activado
-            if self.show_grid.get():
-                ax.grid(True, linestyle='--', alpha=0.3, color='gray')
-            
-            # Personalizar bordes y ticks
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-            ax.tick_params(labelsize=9)
-            
-            # Leyenda con mejor formato
-            legend = ax.legend(
-                bbox_to_anchor=(1.05, 1), 
-                loc='upper left',
-                frameon=True,
-                fancybox=True,
-                shadow=True,
-                fontsize=9
-            )
 
     def show_chart(self):
         """Mostrar el gráfico seleccionado."""
@@ -455,9 +283,18 @@ class DataVisualizerGUI:
             self.current_canvas = None
             self.current_toolbar = None
 
-            # Preparar datos
-            x_values, y_data, x_col = self.prepare_data_for_plot()
-            if x_values is None or y_data is None or x_col is None:
+            # Preparar datos usando el repositorio
+            try:
+                n_points = int(self.n_points.get())
+                x_column = self.x_combo.get() if self.x_combo.get() else None
+                
+                x_values, y_data, x_col = self.data_repository.get_data_for_visualization(
+                    self.file_path,
+                    x_column=x_column,
+                    n_points=n_points
+                )
+            except ValueError as e:
+                messagebox.showerror("Error", str(e))
                 self.update_btn.config(state="normal")
                 self.status_text.set("Error al preparar los datos.")
                 return
@@ -471,35 +308,40 @@ class DataVisualizerGUI:
             ax.set_facecolor(self.COLORS['bg_light'])
             fig.patch.set_facecolor('white')
             
-            # Obtener el tipo de gráfico seleccionado directamente del combobox
+            # Obtener el tipo de gráfico seleccionado
             chart_type = self.chart_combo.get()
             
             try:
-                if chart_type == "Barras":
-                    ax = self.plot_bar_chart(ax, x_values, y_data, x_col, self.COLORS['chart_colors'])
-                elif chart_type == "Líneas":
-                    ax = self.plot_line_chart(ax, x_values, y_data, self.COLORS['chart_colors'])
-                elif chart_type == "Dispersión":
-                    ax = self.plot_scatter_chart(ax, x_values, y_data, self.COLORS['chart_colors'])
-                elif chart_type == "Pastel":
-                    ax = self.plot_pie_chart(ax, y_data, self.COLORS['chart_colors'])
-                    if ax is None:
-                        plt.close(fig)
-                        self.update_btn.config(state="normal")
-                        self.status_text.set("No se pudo crear el gráfico de pastel.")
-                        return
-                else:
-                    messagebox.showerror("Error", f"Tipo de gráfico no reconocido: {chart_type}")
-                    plt.close(fig)
-                    self.update_btn.config(state="normal")
-                    self.status_text.set("Error: tipo de gráfico no válido.")
-                    return
+                # Usar la fábrica para crear el gráfico apropiado
+                chart = ChartFactory.create_chart(chart_type, self.COLORS['chart_colors'])
+                
+                # Dibujar el gráfico
+                ax = chart.plot(ax, x_values, y_data, x_col=x_col)
                 
                 # Configuración general del gráfico
-                self.configure_general_chart(ax, chart_type, x_col)
+                ChartFactory.configure_chart(ax, chart_type, x_col)
                 
-                # Ajustar layout
+                # Configuraciones adicionales
                 if chart_type != "Pastel":
+                    # Rotar etiquetas si está activado
+                    if self.rotate_labels.get():
+                        plt.xticks(rotation=45, ha='right')
+                    
+                    # Mostrar cuadrícula si está activado
+                    if self.show_grid.get():
+                        ax.grid(True, linestyle='--', alpha=0.3, color='gray')
+                    
+                    # Leyenda con mejor formato
+                    legend = ax.legend(
+                        bbox_to_anchor=(1.05, 1), 
+                        loc='upper left',
+                        frameon=True,
+                        fancybox=True,
+                        shadow=True,
+                        fontsize=9
+                    )
+                    
+                    # Ajustar layout
                     fig.tight_layout(rect=[0, 0, 0.85, 1])  # Dejar espacio para la leyenda
                 else:
                     fig.tight_layout()

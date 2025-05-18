@@ -5,14 +5,14 @@ from core.data_visualizer import DataVisualizerGUI
 class VisualizerWindow:
     """Ventana para visualizar datos."""
 
-    def __init__(self, dataframe: pd.DataFrame):
+    def __init__(self, file_path: str):
         """
         Iniciar la ventana de visualización.
         Args:
-            dataframe: DataFrame con los datos a visualizar
+            file_path: Ruta al archivo CSV con los datos a visualizar
         """
-        self.dataframe = dataframe
-        self.visualizer = DataVisualizerGUI(dataframe)
+        self.file_path = file_path
+        self.visualizer = DataVisualizerGUI(file_path)
 
     def run(self):
         """Ejecutar la ventana de visualización."""

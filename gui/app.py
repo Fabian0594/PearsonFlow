@@ -36,31 +36,37 @@ class App:
                 self.show_error("No se ha seleccionado ningún archivo.")
                 sys.exit(1)
                 
-            df = pd.read_csv(file_path)
-            
-            # Verificar que hay datos
-            if df.empty:
-                self.show_error("El archivo está vacío.")
-                self.load_data()
-                return
-                
-            # Crear y mostrar visualizador
+            # Verificar que el archivo existe antes de continuar
             try:
-                visualizer_gui = DataVisualizerGUI(df)
-                # Iniciar el bucle de la interfaz para mantenerla abierta
-                visualizer_gui.run()
-            except Exception as e:
-                self.show_error(f"Error al mostrar el visualizador: {str(e)}")
-                traceback.print_exc()
+                df = pd.read_csv(file_path)
+                
+                # Verificar que hay datos
+                if df.empty:
+                    self.show_error("El archivo está vacío.")
+                    self.load_data()
+                    return
+                    
+                # Crear y mostrar visualizador
+                try:
+                    # Pasar el file_path en lugar del DataFrame
+                    visualizer_gui = DataVisualizerGUI(file_path)
+                    # Iniciar el bucle de la interfaz para mantenerla abierta
+                    visualizer_gui.run()
+                except Exception as e:
+                    self.show_error(f"Error al mostrar el visualizador: {str(e)}")
+                    traceback.print_exc()
             
-        except pd.errors.EmptyDataError:
-            self.show_error("El archivo CSV está vacío.")
-            self.load_data()
-        except pd.errors.ParserError:
-            self.show_error("Error al analizar el archivo CSV. Formato inválido.")
-            self.load_data()
+            except pd.errors.EmptyDataError:
+                self.show_error("El archivo CSV está vacío.")
+                self.load_data()
+            except pd.errors.ParserError:
+                self.show_error("Error al analizar el archivo CSV. Formato inválido.")
+                self.load_data()
+            except Exception as e:
+                self.show_error(f"Error al cargar los datos: {str(e)}")
+                self.load_data()
         except Exception as e:
-            self.show_error(f"Error al cargar los datos: {str(e)}")
+            self.show_error(f"Error general: {str(e)}")
             self.load_data()
     
     def show_error(self, message):
