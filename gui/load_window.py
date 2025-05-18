@@ -1,135 +1,177 @@
-from tkinter import Tk, Label, Button, Entry, filedialog, StringVar, OptionMenu
+from tkinter import Tk, Label, Button, Entry, filedialog, StringVar, OptionMenu, Frame, ttk, messagebox
 from core.csv_loader import CSVLoader
 from utils.csv_validator import ValidatorCSV
 import pandas as pd
+import logging
 
 class LoadWindow(CSVLoader):
     """Ventana para subir un archivo CSV."""
 
+    TIPOS_DATOS = ["int64", "float64", "object"]
+
     def __init__(self):
         super().__init__(path="")
         self.root = Tk()
-        self.root.title("Subir Archivo CSV")
-        self.root.geometry("500x400")
-        self.message_label = None
-        self.validate_button = None
-        self.visualize_button = None
-        self.guide_label = None
-        self.column_name_entry = None
-        self.column_type_var = None
+        self.setup_window()
+        self.init_variables()
         self.create_widgets()
+
+    def setup_window(self):
+        """Configurar la ventana principal."""
+        self.root.title("PearsonFlow - Carga de Datos")
+        self.root.geometry("500x500")
+        self.root.resizable(False, False)
+        
+        # Crear frame principal
+        self.main_frame = Frame(self.root)
+        self.main_frame.pack(expand=True, fill='both', padx=20, pady=20)
+
+    def init_variables(self):
+        """Inicializar variables."""
+        self.message_var = StringVar()
+        self.column_type_var = StringVar(value=self.TIPOS_DATOS[0])
+        self.widgets = {}
 
     def create_widgets(self):
         """Crear los elementos de la ventana."""
-        # Etiqueta de título
-        label = Label(self.root, text="Subir Archivo", font=("Arial", 14))
-        label.pack(pady=10)
+        # Título
+        Label(self.main_frame, text="Carga y Validación de Datos", 
+              font=("Arial", 16, "bold")).pack(pady=10)
 
-        # Botón para cargar archivo
-        upload_button = Button(self.root, text="Cargar Archivo", command=self.load_file)
-        upload_button.pack(pady=10)
+        # Botón de carga
+        self.widgets['upload_button'] = ttk.Button(
+            self.main_frame, 
+            text="Seleccionar Archivo CSV",
+            command=self.load_file
+        )
+        self.widgets['upload_button'].pack(pady=10)
 
-        # Etiqueta para mostrar mensajes
-        self.message_label = Label(self.root, text="", font=("Arial", 12), fg="green")
-        self.message_label.pack(pady=10)
+        # Mensaje de estado
+        Label(self.main_frame, textvariable=self.message_var,
+              wraplength=400, font=("Arial", 10)).pack(pady=10)
+
+        # Frame para validación
+        self.validation_frame = Frame(self.main_frame)
+        self.create_validation_widgets()
+
+    def create_validation_widgets(self):
+        """Crear widgets para validación."""
+        # Guía de tipos
+        Label(self.validation_frame, 
+              text="Validación de Columnas (Opcional)",
+              font=("Arial", 12, "bold")).pack(pady=5)
+        
+        Label(self.validation_frame,
+              text="Si desea validar una columna, ingrese su nombre y tipo de dato esperado",
+              font=("Arial", 10)).pack(pady=5)
+
+        # Entrada para nombre de columna
+        ttk.Label(self.validation_frame, text="Nombre de la columna:").pack(pady=5)
+        self.widgets['column_name'] = ttk.Entry(self.validation_frame)
+        self.widgets['column_name'].pack(pady=5)
+
+        # Selector de tipo
+        ttk.Label(self.validation_frame, text="Tipo de dato:").pack(pady=5)
+        ttk.OptionMenu(self.validation_frame, self.column_type_var, 
+                      self.TIPOS_DATOS[0], *self.TIPOS_DATOS).pack(pady=5)
+
+        # Botones
+        button_frame = Frame(self.validation_frame)
+        button_frame.pack(pady=10)
+        
+        self.widgets['validate_button'] = ttk.Button(
+            button_frame, text="Validar Columna", command=self.validate_column)
+        self.widgets['validate_button'].pack(side='left', padx=5)
+        
+        self.widgets['visualize_button'] = ttk.Button(
+            button_frame, text="Visualizar Datos", command=self.advance_to_visualizer)
+        self.widgets['visualize_button'].pack(side='left', padx=5)
 
     def load_file(self):
-        """Método para cargar el archivo usando un diálogo de selección."""
+        """Cargar archivo CSV."""
         try:
-            # Abrir diálogo para seleccionar archivo
-            self.path = filedialog.askopenfilename(
+            file_path = filedialog.askopenfilename(
                 filetypes=[("Archivos CSV", "*.csv")],
                 title="Seleccionar Archivo CSV"
             )
-            if not self.path:
-                raise ValueError("No se seleccionó ningún archivo.")
-
-            # Mostrar mensaje de éxito
-            self.message_label.config(text=f"Archivo cargado: {self.path}", fg="green")
-
-            # Crear widgets para validar columna si no existen
-            self.add_column_validation_widgets()
-
-            # Crear botón para avanzar a la visualización si no existe
-            if not self.visualize_button:
-                self.visualize_button = Button(self.root, text="Visualizar Datos", command=self.advance_to_visualizer)
-                self.visualize_button.pack(pady=10)
-
-        except ValueError as e:
-            self.message_label.config(text=f"Error: {e}", fg="red")
+            
+            if not file_path:
+                return
+                
+            self.path = file_path
+            pd.read_csv(self.path)  # Validar que se puede leer
+            
+            self.message_var.set(f"Archivo cargado: {self.path}")
+            self.validation_frame.pack(expand=True, fill='both')
+            logging.info(f"Archivo cargado exitosamente: {self.path}")
+            
         except Exception as e:
-            self.message_label.config(text=f"Error inesperado: {e}", fg="red")
-
-    def add_column_validation_widgets(self):
-        """Crear widgets para validar una columna específica (solo una vez)."""
-        # Mostrar guía de tipos
-        if not self.guide_label:
-            self.guide_label = Label(
-                self.root,
-                text="Guía de Tipos: int64, float64, object (texto)",
-                font=("Arial", 10),
-                fg="blue"
-            )
-            self.guide_label.pack(pady=5)
-
-        # Entrada para el nombre de la columna
-        if not self.column_name_entry:
-            Label(self.root, text="Nombre de la columna:", font=("Arial", 12)).pack(pady=5)
-            self.column_name_entry = Entry(self.root)
-            self.column_name_entry.pack(pady=5)
-
-        # Menú desplegable para seleccionar el tipo de dato
-        if not self.column_type_var:
-            Label(self.root, text="Tipo de dato esperado:", font=("Arial", 12)).pack(pady=5)
-            self.column_type_var = StringVar(self.root)
-            self.column_type_var.set("int64")  # Valor por defecto
-            column_type_menu = OptionMenu(self.root, self.column_type_var, "int64", "float64", "object")
-            column_type_menu.pack(pady=5)
-
-        # Botón para validar la columna
-        if not self.validate_button:
-            self.validate_button = Button(self.root, text="Validar Columna", command=self.validate_column)
-            self.validate_button.pack(pady=10)
+            self.message_var.set(f"Error al cargar el archivo: {str(e)}")
+            logging.error(f"Error al cargar archivo: {e}")
 
     def validate_column(self):
-        """Método para validar una columna específica."""
+        """Validar una columna específica."""
         try:
-            dataframe = pd.read_csv(self.path)
-            validator = ValidatorCSV(dataframe)
-
-            # Obtener el nombre de la columna y el tipo esperado
-            column_name = self.column_name_entry.get()
-            column_type = self.column_type_var.get()
-
+            column_name = self.widgets['column_name'].get().strip()
             if not column_name:
-                raise ValueError("Debe ingresar un nombre de columna.")
+                raise ValueError("Debe ingresar un nombre de columna")
 
-            # Validar el tipo de la columna
-            validator.validate_column_types({column_name: column_type})
-
-            # Verificar si hay valores nulos en la columna
-            if dataframe[column_name].isnull().any():
-                self.message_label.config(
-                    text=f"Advertencia: La columna '{column_name}' contiene valores nulos.",
-                    fg="orange"
-                )
+            df = pd.read_csv(self.path)
+            validator = ValidatorCSV(df)
+            
+            # Verificar valores nulos primero
+            null_counts = validator.validate_no_nulls([column_name])
+            nulls = null_counts.get(column_name, 0)
+            
+            if nulls > 0:
+                # Si hay valores nulos y el tipo es numérico, preguntar qué hacer
+                if self.column_type_var.get() in ['int64', 'float64']:
+                    response = messagebox.askyesno(
+                        "Valores Nulos Detectados",
+                        f"La columna '{column_name}' tiene {nulls} valores nulos. "
+                        "¿Desea reemplazarlos con 0?"
+                    )
+                    
+                    if response:
+                        # Validar tipo con reemplazo de nulos
+                        validator.validate_column_types(
+                            {column_name: self.column_type_var.get()},
+                            fill_values={column_name: 0}
+                        )
+                        self.message_var.set(
+                            f"Columna '{column_name}' validada correctamente. "
+                            f"{nulls} valores nulos reemplazados con 0"
+                        )
+                    else:
+                        self.message_var.set(
+                            f"Advertencia: La columna '{column_name}' tiene {nulls} valores nulos"
+                        )
+                else:
+                    # Para tipos no numéricos, solo informar
+                    validator.validate_column_types({column_name: self.column_type_var.get()})
+                    self.message_var.set(
+                        f"Columna '{column_name}' validada. "
+                        f"Contiene {nulls} valores nulos"
+                    )
             else:
-                self.message_label.config(
-                    text=f"Columna '{column_name}' validada correctamente.",
-                    fg="green"
-                )
-        except ValueError as e:
-            self.message_label.config(text=f"Error de validación: {e}", fg="red")
+                # Si no hay nulos, validar normalmente
+                validator.validate_column_types({column_name: self.column_type_var.get()})
+                self.message_var.set(f"Columna '{column_name}' validada correctamente")
+            
         except Exception as e:
-            self.message_label.config(text=f"Error inesperado: {e}", fg="red")
+            self.message_var.set(f"Error de validación: {str(e)}")
+            logging.error(f"Error en validación: {e}")
+        
+        # Habilitar el botón de visualización independientemente del resultado
+        self.widgets['visualize_button'].config(state='normal')
 
     def advance_to_visualizer(self):
-        """Método para avanzar a la visualización de datos."""
-        self.root.quit()  # Detener el bucle principal
-        self.root.destroy()  # Cerrar la ventana de carga
-        self.on_visualize_callback(self.path)  # Llamar al callback para avanzar
+        """Avanzar a la visualización."""
+        self.root.quit()
+        self.root.destroy()
+        self.on_visualize_callback(self.path)
 
     def run(self, on_visualize_callback):
         """Ejecutar la ventana."""
-        self.on_visualize_callback = on_visualize_callback  # Guardar el callback
+        self.on_visualize_callback = on_visualize_callback
         self.root.mainloop()

@@ -1,39 +1,75 @@
-from tkinter import Tk
+from tkinter import Tk, messagebox
+import sys
+import traceback
+import pandas as pd
 from gui.load_window import LoadWindow
 from gui.visualizer_window import VisualizerWindow
-import pandas as pd
-import sys
+from core.data_visualizer import DataVisualizerGUI
 
 class App:
-    """Clase principal para conectar las interfaces."""
-
+    """Aplicación principal que coordina las ventanas de carga y visualización."""
+    
     def __init__(self):
-        self.root = Tk()
-        self.root.withdraw()  # Ocultar la ventana principal de Tkinter
-        self.run_load_window()
-
-    def run_load_window(self):
-        """Ejecutar la ventana de carga."""
-        load_window = LoadWindow()
-        load_window.run(on_visualize_callback=self.run_visualizer_window)
-
-    def run_visualizer_window(self, path: str):
-        """Ejecutar la ventana de visualización."""
+        """Inicializar la aplicación."""
+        # Configurar controladores de excepciones
+        sys.excepthook = self.handle_exception
+        
+        # Iniciar flujo de la aplicación
+        self.load_data()
+    
+    def load_data(self):
+        """Mostrar ventana de carga de datos."""
         try:
-            dataframe = pd.read_csv(path)
-            visualizer_window = VisualizerWindow(dataframe)
-            visualizer_window.run()
-        except ValueError as e:
-            print(f"Error al cargar el archivo: {e}")
+            load_window = LoadWindow()
+            load_window.run(self.on_data_loaded)
         except Exception as e:
-            print(f"Error inesperado: {e}")
-        finally:
-            self.close_app()
-
-    def close_app(self):
-        """Cerrar la aplicación."""
-        print("Cerrando la aplicación...")
-        if self.root:
-            self.root.quit()
-            self.root.destroy()
+            self.show_error(f"Error al iniciar la ventana de carga: {str(e)}")
+    
+    def on_data_loaded(self, file_path):
+        """Manejar evento de datos cargados."""
+        try:
+            if not file_path:
+                self.show_error("No se ha seleccionado ningún archivo.")
+                sys.exit(1)
+                
+            df = pd.read_csv(file_path)
+            
+            # Verificar que hay datos
+            if df.empty:
+                self.show_error("El archivo está vacío.")
+                self.load_data()
+                return
+                
+            # Crear y mostrar visualizador
+            visualizer_gui = DataVisualizerGUI(df)
+            
+        except pd.errors.EmptyDataError:
+            self.show_error("El archivo CSV está vacío.")
+            self.load_data()
+        except pd.errors.ParserError:
+            self.show_error("Error al analizar el archivo CSV. Formato inválido.")
+            self.load_data()
+        except Exception as e:
+            self.show_error(f"Error al cargar los datos: {str(e)}")
+            self.load_data()
+    
+    def show_error(self, message):
+        """Mostrar mensaje de error."""
+        root = Tk()
+        root.withdraw()
+        messagebox.showerror("Error", message)
+        root.destroy()
+    
+    def handle_exception(self, exc_type, exc_value, exc_traceback):
+        """Manejar excepciones no capturadas."""
+        if issubclass(exc_type, KeyboardInterrupt):
+            # Permitir salir con Ctrl+C
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+            return
+            
+        error_msg = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+        self.show_error(f"Ha ocurrido un error inesperado:\n{str(exc_value)}")
+        
+        # Registrar el error completo en la consola
+        print(f"ERROR NO CAPTURADO: {error_msg}", file=sys.stderr)
 
