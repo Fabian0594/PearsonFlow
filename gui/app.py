@@ -11,6 +11,10 @@ class App:
     
     def __init__(self):
         """Inicializar la aplicación."""
+        # Raíz de Tk oculta para mensajes
+        self.root = Tk()
+        self.root.withdraw()
+        
         # Configurar controladores de excepciones
         sys.excepthook = self.handle_exception
         
@@ -41,7 +45,13 @@ class App:
                 return
                 
             # Crear y mostrar visualizador
-            visualizer_gui = DataVisualizerGUI(df)
+            try:
+                visualizer_gui = DataVisualizerGUI(df)
+                # Iniciar el bucle de la interfaz para mantenerla abierta
+                visualizer_gui.run()
+            except Exception as e:
+                self.show_error(f"Error al mostrar el visualizador: {str(e)}")
+                traceback.print_exc()
             
         except pd.errors.EmptyDataError:
             self.show_error("El archivo CSV está vacío.")
@@ -55,10 +65,7 @@ class App:
     
     def show_error(self, message):
         """Mostrar mensaje de error."""
-        root = Tk()
-        root.withdraw()
         messagebox.showerror("Error", message)
-        root.destroy()
     
     def handle_exception(self, exc_type, exc_value, exc_traceback):
         """Manejar excepciones no capturadas."""

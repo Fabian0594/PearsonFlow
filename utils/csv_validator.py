@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from typing import List, Dict, Union, Optional
+from typing import List, Dict, Union, Optional, Tuple
 import logging
 
 class ValidatorCSV:
@@ -15,7 +15,7 @@ class ValidatorCSV:
         """
         if not isinstance(dataframe, pd.DataFrame):
             raise TypeError("Se requiere un DataFrame de pandas")
-        self._dataframe = dataframe.copy()
+        self.dataframe = dataframe.copy()
 
     def validate_columns(self, required_columns: List[str]) -> bool:
         """
@@ -33,26 +33,52 @@ class ValidatorCSV:
         if not required_columns:
             return True
             
-        missing_columns = [col for col in required_columns if col not in self._dataframe.columns]
+        missing_columns = [col for col in required_columns if col not in self.dataframe.columns]
         if missing_columns:
             raise ValueError(f"Faltan las siguientes columnas requeridas: {missing_columns}")
         return True
 
-    def validate_no_nulls(self, columns: List[str] = None) -> Dict[str, int]:
+    def validate_no_nulls(self, columns: List[str]) -> Dict[str, int]:
         """
-        Validar valores nulos en el DataFrame.
+        Validar que las columnas especificadas no tengan valores nulos.
         
         Args:
-            columns (List[str], optional): Lista de columnas específicas a validar
+            columns: Lista de nombres de columnas a validar
             
         Returns:
-            Dict[str, int]: Diccionario con el conteo de nulos por columna
+            Dict[str, int]: Diccionario con el conteo de valores nulos por columna
+            
+        Raises:
+            ValueError: Si alguna columna no existe en el DataFrame
         """
-        columns = columns or self._dataframe.columns
-        null_counts = {col: int(self._dataframe[col].isnull().sum()) 
-                      for col in columns if col in self._dataframe.columns}
+        result = {}
         
-        return null_counts
+        for column in columns:
+            if not self.validate_column_exists(column):
+                raise ValueError(f"La columna '{column}' no existe en el DataFrame")
+            
+            null_count = self.dataframe[column].isna().sum()
+            result[column] = null_count
+            
+        return result
+
+    def validate_column_exists(self, column_name: str) -> bool:
+        """
+        Validar que una columna existe en el DataFrame.
+        
+        Args:
+            column_name: Nombre de la columna a validar
+            
+        Returns:
+            bool: True si la columna existe, False en caso contrario
+            
+        Raises:
+            ValueError: Si el nombre de columna está vacío
+        """
+        if not column_name:
+            raise ValueError("El nombre de columna no puede estar vacío")
+            
+        return column_name in self.dataframe.columns
 
     def _safe_convert_column(self, column: str, target_type: str, fill_value: Optional[Union[int, float, str]] = None) -> pd.Series:
         """
@@ -69,7 +95,7 @@ class ValidatorCSV:
         Raises:
             ValueError: Si la conversión no es posible
         """
-        series = self._dataframe[column]
+        series = self.dataframe[column]
         
         # Manejar valores nulos/infinitos según el tipo objetivo
         if target_type in ['int64', 'float64']:
@@ -91,49 +117,92 @@ class ValidatorCSV:
             raise ValueError(f"Error al convertir la columna '{column}': {str(e)}")
 
     def validate_column_types(self, column_types: Dict[str, str], 
-                            fill_values: Dict[str, Union[int, float, str]] = None) -> bool:
+                             fill_values: Optional[Dict[str, Union[int, float, str]]] = None) -> bool:
         """
-        Validar que las columnas tengan los tipos de datos esperados.
+        Validar y convertir tipos de datos de columnas.
         
         Args:
-            column_types (Dict[str, str]): Diccionario de columnas y sus tipos esperados
-            fill_values (Dict[str, Union[int, float, str]], optional): Valores para reemplazar NaN/inf
+            column_types: Diccionario con nombres de columnas y sus tipos esperados
+            fill_values: Diccionario con valores para reemplazar nulos por columna
             
         Returns:
-            bool: True si la validación es exitosa
+            bool: True si todas las conversiones fueron exitosas
             
         Raises:
-            ValueError: Si una columna no existe o no tiene el tipo esperado
-            TypeError: Si los tipos especificados no son válidos
+            ValueError: Si alguna columna no existe o no puede convertirse al tipo especificado
         """
-        valid_types = {'int64', 'float64', 'object', 'bool', 'datetime64[ns]'}
-        fill_values = fill_values or {}
+        if not column_types:
+            return True
+            
+        # Convertir tipos de columnas en copia para no modificar el original
+        df_copy = self.dataframe.copy()
         
-        for column, expected_type in column_types.items():
-            if expected_type not in valid_types:
-                raise TypeError(f"Tipo de dato no válido: {expected_type}")
-                
-            if column not in self._dataframe.columns:
+        for column, dtype in column_types.items():
+            if not self.validate_column_exists(column):
                 raise ValueError(f"La columna '{column}' no existe en el DataFrame")
                 
-            current_type = str(self._dataframe[column].dtype)
-            if current_type != expected_type:
-                try:
-                    # Convertir la columna con el valor de reemplazo si se proporciona
-                    self._dataframe[column] = self._safe_convert_column(
-                        column, 
-                        expected_type,
-                        fill_values.get(column)
-                    )
-                    logging.info(
-                        f"Columna '{column}' convertida a {expected_type}"
-                        + (f" (valores nulos/inf reemplazados con {fill_values[column]})" 
-                           if column in fill_values else "")
-                    )
-                except Exception as e:
-                    raise ValueError(str(e))
+            try:
+                # Reemplazar valores nulos si es necesario
+                if fill_values and column in fill_values:
+                    df_copy[column] = df_copy[column].fillna(fill_values[column])
                     
+                # Convertir tipo
+                df_copy[column] = df_copy[column].astype(dtype)
+                
+                # Actualizar DataFrame original
+                self.dataframe[column] = df_copy[column]
+                
+            except (ValueError, TypeError) as e:
+                problematic_values = self._find_problematic_values(column, dtype)
+                error_msg = f"Error al convertir columna '{column}' a {dtype}: {str(e)}"
+                if problematic_values:
+                    error_msg += f"\nValores problemáticos: {problematic_values}"
+                raise ValueError(error_msg)
+                
         return True
+
+    def _find_problematic_values(self, column: str, target_type: str) -> List:
+        """
+        Encontrar valores que no pueden convertirse al tipo especificado.
+        
+        Args:
+            column: Nombre de la columna
+            target_type: Tipo de dato objetivo
+            
+        Returns:
+            List: Lista de valores problemáticos (máximo 5)
+        """
+        problematic = []
+        
+        # Filtrar valores no nulos
+        non_null_values = self.dataframe[column].dropna()
+        
+        if target_type in ('int64', 'int'):
+            # Para enteros, verificar si son números y no tienen parte decimal
+            for val in non_null_values.sample(min(10, len(non_null_values))):
+                try:
+                    float_val = float(val)
+                    if float_val != int(float_val):
+                        problematic.append(val)
+                except:
+                    problematic.append(val)
+                
+                if len(problematic) >= 5:
+                    break
+                    
+        elif target_type in ('float64', 'float'):
+            # Para flotantes, verificar si son números
+            for val in non_null_values.sample(min(10, len(non_null_values))):
+                try:
+                    float(val)
+                except:
+                    problematic.append(val)
+                
+                if len(problematic) >= 5:
+                    break
+                    
+        # Limitar la cantidad de valores problemáticos mostrados
+        return problematic[:5]
 
     def validate_value_ranges(self, ranges: Dict[str, Dict[str, Union[float, int]]]) -> bool:
         """
@@ -150,17 +219,17 @@ class ValidatorCSV:
             ValueError: Si los valores están fuera de rango
         """
         for column, range_values in ranges.items():
-            if column not in self._dataframe.columns:
+            if column not in self.dataframe.columns:
                 raise ValueError(f"La columna '{column}' no existe")
                 
-            if not pd.api.types.is_numeric_dtype(self._dataframe[column]):
+            if not pd.api.types.is_numeric_dtype(self.dataframe[column]):
                 raise TypeError(f"La columna '{column}' no es numérica")
                 
             min_val = range_values.get('min', -np.inf)
             max_val = range_values.get('max', np.inf)
             
             # Ignorar valores nulos en la validación de rango
-            valid_data = self._dataframe[column].dropna()
+            valid_data = self.dataframe[column].dropna()
             mask = (valid_data < min_val) | (valid_data > max_val)
             invalid_count = mask.sum()
             
@@ -171,3 +240,61 @@ class ValidatorCSV:
                 )
                 
         return True
+
+    def validate_unique_values(self, column: str) -> Tuple[bool, int]:
+        """
+        Validar que una columna tenga valores únicos.
+        
+        Args:
+            column: Nombre de la columna
+            
+        Returns:
+            Tuple[bool, int]: (Es única, Número de duplicados)
+            
+        Raises:
+            ValueError: Si la columna no existe
+        """
+        if not self.validate_column_exists(column):
+            raise ValueError(f"La columna '{column}' no existe en el DataFrame")
+            
+        duplicates = self.dataframe[column].duplicated().sum()
+        return duplicates == 0, duplicates
+
+    def validate_value_range(self, column: str, min_value: float = None, 
+                           max_value: float = None) -> Tuple[bool, List]:
+        """
+        Validar que los valores de una columna estén dentro de un rango.
+        
+        Args:
+            column: Nombre de la columna
+            min_value: Valor mínimo permitido
+            max_value: Valor máximo permitido
+            
+        Returns:
+            Tuple[bool, List]: (Todos en rango, Lista de valores fuera de rango)
+            
+        Raises:
+            ValueError: Si la columna no existe o no es numérica
+        """
+        if not self.validate_column_exists(column):
+            raise ValueError(f"La columna '{column}' no existe en el DataFrame")
+            
+        # Verificar que la columna sea numérica
+        if not pd.api.types.is_numeric_dtype(self.dataframe[column]):
+            raise ValueError(f"La columna '{column}' no es numérica")
+            
+        out_of_range = []
+        
+        # Filtrar por mínimo si se especifica
+        if min_value is not None:
+            below_min = self.dataframe[self.dataframe[column] < min_value][column]
+            if not below_min.empty:
+                out_of_range.extend(below_min.head(5).tolist())
+                
+        # Filtrar por máximo si se especifica
+        if max_value is not None:
+            above_max = self.dataframe[self.dataframe[column] > max_value][column]
+            if not above_max.empty:
+                out_of_range.extend(above_max.head(5).tolist())
+                
+        return len(out_of_range) == 0, out_of_range
