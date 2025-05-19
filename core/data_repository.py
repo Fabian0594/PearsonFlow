@@ -159,12 +159,29 @@ class DataRepository:
         Raises:
             ValueError: Si no hay columnas numéricas para visualizar
         """
-        # Asegurar que el archivo está cargado
-        if file_path not in self.cached_data:
-            self.load_csv(file_path)
+        # Leer los datos del archivo directamente para asegurar datos frescos
+        try:
+            # Verificamos que el archivo exista
+            if not os.path.exists(file_path):
+                raise FileNotFoundError(f"El archivo {file_path} no existe")
+                
+            # Leer datos directamente del archivo
+            df = pd.read_csv(file_path)
             
-        df = self.cached_data[file_path]
+            # Actualizar la caché con los nuevos datos
+            self.cached_data[file_path] = df.copy()
+        except Exception as e:
+            # Si hay algún error, intentar usar la caché
+            if file_path not in self.cached_data:
+                raise ValueError(f"Error al cargar el archivo: {str(e)}")
+            df = self.cached_data[file_path].copy()
         
+        # Validar que n_points sea válido
+        if n_points <= 0:
+            n_points = len(df)
+        elif n_points > len(df):
+            n_points = len(df)
+            
         # Tomar los últimos n_points
         df = df.tail(n_points).copy()
         

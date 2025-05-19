@@ -269,7 +269,7 @@ class DataVisualizerGUI:
         self.root.update_idletasks()  # Actualizar la interfaz
         
         try:
-            # Limpiar gráfico anterior
+            # Limpiar gráfico anterior completamente
             plt.close('all')  # Cerrar todas las figuras abiertas
             
             if self.current_canvas:
@@ -282,22 +282,73 @@ class DataVisualizerGUI:
                 
             self.current_canvas = None
             self.current_toolbar = None
+            
+            # Limpiar el contenido del frame de gráfico
+            for widget in self.chart_frame.winfo_children():
+                widget.destroy()
 
-            # Preparar datos usando el repositorio
+            # Obtener los valores de los controles
             try:
+                # Asegurar que n_points sea un entero válido
                 n_points = int(self.n_points.get())
-                x_column = self.x_combo.get() if self.x_combo.get() else None
+                if n_points <= 0:
+                    n_points = 50  # Valor predeterminado si es inválido
+            except ValueError:
+                n_points = 50  # Valor predeterminado si no es un número
+                self.n_points.set("50")
+            
+            x_column = self.x_combo.get() if self.x_combo.get() else None
+            chart_type = self.chart_combo.get()
+            
+            # Mostrar indicador de carga
+            self.status_text.set(f"Cargando {n_points} puntos de datos...")
+            self.root.update_idletasks()  # Actualizar la interfaz
+            
+            # Forzar una nueva lectura del archivo CSV
+            try:
+                # Leer directamente del archivo CSV
+                df = pd.read_csv(self.file_path)
                 
-                x_values, y_data, x_col = self.data_repository.get_data_for_visualization(
-                    self.file_path,
-                    x_column=x_column,
-                    n_points=n_points
-                )
-            except ValueError as e:
-                messagebox.showerror("Error", str(e))
+                # Aplicar el filtro de n_points
+                df = df.tail(n_points).copy()
+                
+                # Preparar datos para X e Y
+                if not x_column:
+                    x_values = range(len(df))
+                    x_col = "Índice"
+                else:
+                    if x_column not in df.columns:
+                        raise ValueError(f"La columna '{x_column}' no existe en el dataset")
+                    
+                    # Convertir a datetime si es posible
+                    try:
+                        if df[x_column].dtype == 'object':
+                            df[x_column] = pd.to_datetime(df[x_column], errors='coerce')
+                        x_values = df[x_column]
+                    except Exception:
+                        x_values = df[x_column]
+                    
+                    x_col = x_column
+                
+                # Obtener columnas numéricas para Y
+                numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
+                if x_col in numeric_cols and x_col != "Índice":
+                    numeric_cols = numeric_cols.drop(x_col)
+                
+                if len(numeric_cols) == 0:
+                    raise ValueError("No hay columnas numéricas disponibles para graficar")
+                
+                y_data = df[numeric_cols]
+                
+            except Exception as e:
+                messagebox.showerror("Error", f"Error al preparar datos: {str(e)}")
                 self.update_btn.config(state="normal")
                 self.status_text.set("Error al preparar los datos.")
                 return
+            
+            # Actualizar estado
+            self.status_text.set(f"Datos cargados: {len(y_data)} filas. Generando gráfico...")
+            self.root.update_idletasks()  # Actualizar la interfaz
 
             # Crear figura con estilo mejorado
             plt.style.use('seaborn-v0_8-whitegrid')
@@ -307,9 +358,6 @@ class DataVisualizerGUI:
             # Configurar colores y estilo
             ax.set_facecolor(self.COLORS['bg_light'])
             fig.patch.set_facecolor('white')
-            
-            # Obtener el tipo de gráfico seleccionado
-            chart_type = self.chart_combo.get()
             
             try:
                 # Usar la fábrica para crear el gráfico apropiado
@@ -346,10 +394,6 @@ class DataVisualizerGUI:
                 else:
                     fig.tight_layout()
                 
-                # Limpiar el frame de gráfico
-                for widget in self.chart_frame.winfo_children():
-                    widget.destroy()
-                    
                 # Crear marco para el gráfico con etiqueta    
                 chart_container = ttk.LabelFrame(self.chart_frame, text=f"Visualización - {chart_type}", padding=(5, 5))
                 chart_container.pack(fill="both", expand=True, padx=5, pady=5)
@@ -366,7 +410,7 @@ class DataVisualizerGUI:
                 self.current_toolbar = NavigationToolbar2Tk(self.current_canvas, toolbar_frame)
                 self.current_toolbar.update()
                 
-                self.status_text.set(f"Gráfico {chart_type} generado exitosamente.")
+                self.status_text.set(f"Gráfico {chart_type} generado exitosamente con {n_points} puntos.")
                 
             except Exception as e:
                 messagebox.showerror("Error", f"Error al crear el gráfico: {str(e)}")
