@@ -192,9 +192,23 @@ class ChartFactory:
         Raises:
             ValueError: Si el tipo de gráfico no es válido
         """
-        if chart_type not in cls.CHART_TYPES:
-            raise ValueError(f"Tipo de gráfico desconocido: {chart_type}")
+        # Validar que chart_type es una cadena
+        if not isinstance(chart_type, str):
+            raise ValueError(f"El tipo de gráfico debe ser una cadena, se recibió: {type(chart_type)}")
             
+        # Si no se proporciona una lista de colores o está vacía, usar valores predeterminados
+        if not colors or not isinstance(colors, list) or len(colors) == 0:
+            default_colors = ['#2ecc71', '#3498db', '#e74c3c', '#f1c40f', '#9b59b6', '#1abc9c']
+            colors = default_colors
+            
+        # Verificar si el tipo de gráfico existe, si no, usar el primero disponible
+        if chart_type not in cls.CHART_TYPES:
+            available_types = list(cls.CHART_TYPES.keys())
+            default_type = available_types[0]
+            print(f"ADVERTENCIA: Tipo de gráfico '{chart_type}' desconocido. Usando '{default_type}' en su lugar.")
+            chart_type = default_type
+            
+        # Crear y devolver la instancia del gráfico
         chart_class = cls.CHART_TYPES[chart_type]
         return chart_class(colors)
     

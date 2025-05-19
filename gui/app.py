@@ -9,8 +9,13 @@ from core.data_visualizer import DataVisualizerGUI
 class App:
     """Aplicación principal que coordina las ventanas de carga y visualización."""
     
-    def __init__(self):
-        """Inicializar la aplicación."""
+    def __init__(self, file_path=None):
+        """
+        Inicializar la aplicación.
+        
+        Args:
+            file_path (str, optional): Ruta a un archivo CSV para cargar automáticamente.
+        """
         # Raíz de Tk oculta para mensajes
         self.root = Tk()
         self.root.withdraw()
@@ -19,7 +24,12 @@ class App:
         sys.excepthook = self.handle_exception
         
         # Iniciar flujo de la aplicación
-        self.load_data()
+        if file_path:
+            # Si se proporciona una ruta de archivo, cargarla directamente
+            self.on_data_loaded(file_path)
+        else:
+            # De lo contrario, mostrar ventana de selección
+            self.load_data()
     
     def load_data(self):
         """Mostrar ventana de carga de datos."""
