@@ -1,56 +1,83 @@
-from pymongo import MongoClient
+#!/usr/bin/env python3
+"""
+Prueba directa de MongoDB usando configuración segura
+"""
 
-def test_connection():
-    # URI de conexión
-    uri = "mongodb+srv://fabianhurtado:fabian0594@peasonflowdb.zvucsvh.mongodb.net/"
+import sys
+
+def load_config():
+    """Cargar configuración de MongoDB de forma segura"""
+    try:
+        from config import MONGODB_CONFIG
+        return MONGODB_CONFIG
+    except ImportError:
+        print("❌ Error: No se encontró el archivo config.py")
+        print("📝 Por favor, copia config.example.py como config.py y completa las credenciales")
+        sys.exit(1)
+
+def test_direct_mongodb():
+    """Prueba directa de conexión y operaciones con MongoDB"""
+    config = load_config()
+    uri = config["connection_string"]
+    db_name = config["database_name"]
     
-    # Conectar a MongoDB
-    print("Conectando a MongoDB Atlas...")
-    client = MongoClient(uri)
+    try:
+        from pymongo import MongoClient
+        
+        print(f"🔗 Conectando a MongoDB...")
+        print(f"📊 Base de datos: {db_name}")
+        
+        # Conectar
+        client = MongoClient(uri, serverSelectionTimeoutMS=5000)
+        
+        # Verificar conexión
+        client.admin.command('ping')
+        print("✅ Conexión exitosa")
+        
+        # Acceder a la base de datos
+        db = client[db_name]
+        
+        # Listar colecciones
+        collections = db.list_collection_names()
+        print(f"\n📋 Colecciones disponibles ({len(collections)}):")
+        
+        if not collections:
+            print("  ⚠️  No hay colecciones en esta base de datos")
+            print("  💡 Ejecuta insert_to_peasonflow.py para crear datos de prueba")
+            return False
+        
+        for i, coll_name in enumerate(collections, 1):
+            coll = db[coll_name]
+            count = coll.count_documents({})
+            print(f"  {i}. {coll_name} ({count} documentos)")
+            
+            # Mostrar un documento de ejemplo
+            if count > 0:
+                sample_doc = coll.find_one()
+                print(f"     📄 Ejemplo de documento:")
+                for key, value in list(sample_doc.items())[:3]:  # Solo primeros 3 campos
+                    if key != '_id':
+                        print(f"       • {key}: {value}")
+                if len(sample_doc) > 3:
+                    print(f"       • ... y {len(sample_doc) - 3} campos más")
+                print()
+        
+        # Cerrar conexión
+        client.close()
+        print("👋 Conexión cerrada")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error: {str(e)}")
+        return False
+
+def main():
+    """Función principal"""
+    print("🧪 Prueba Directa de MongoDB - PearsonFlow")
+    print("=" * 50)
     
-    # Probar conexión
-    print("Verificando conexión...")
-    client.admin.command('ping')
-    print("Conexión exitosa!")
-    
-    # Listar bases de datos disponibles
-    print("\nBases de datos disponibles:")
-    dbs = client.list_database_names()
-    for db in dbs:
-        print(f"- {db}")
-    
-    # Crear nueva base de datos y colección
-    db_name = "PeasonFlow"
-    coll_name = "test_collection"
-    
-    print(f"\nCreando colección '{coll_name}' en base de datos '{db_name}'")
-    
-    # En MongoDB, las bases de datos y colecciones se crean cuando se insertan datos
-    db = client[db_name]
-    collection = db[coll_name]
-    
-    # Insertar un documento
-    result = collection.insert_one({"test": True, "message": "Conexión exitosa", "value": 42})
-    print(f"Documento insertado con ID: {result.inserted_id}")
-    
-    # Listar colecciones para verificar
-    print(f"\nColecciones en {db_name}:")
-    collections = db.list_collection_names()
-    for coll in collections:
-        print(f"- {coll}")
-    
-    # Leer el documento insertado
-    doc = collection.find_one({"test": True})
-    print("\nDocumento recuperado:")
-    print(doc)
-    
-    # Cerrar conexión
-    client.close()
-    print("\nConexión cerrada")
+    success = test_direct_mongodb()
+    sys.exit(0 if success else 1)
 
 if __name__ == "__main__":
-    try:
-        test_connection()
-        print("\n¡Test completado con éxito!")
-    except Exception as e:
-        print(f"\nError: {e}") 
+    main() 

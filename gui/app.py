@@ -16,11 +16,6 @@ class App:
     Actúa como controlador principal en el patrón MVC.
     """
     
-    # Constantes de configuración MongoDB
-    # NOTA: En producción, estas credenciales deberían estar en variables de entorno
-    MONGODB_CONN_STRING = "mongodb+srv://fabianhurtado:fabian0594@peasonflowdb.zvucsvh.mongodb.net/"
-    DB_NAME = "PeasonFlow"
-    
     def __init__(self, data_source: Optional[str] = None):
         """
         Inicializar la aplicación principal.
@@ -38,6 +33,9 @@ class App:
         # Mantener referencia a la ventana activa para gestión de memoria
         self.active_window = None
         
+        # Cargar configuración de MongoDB de forma segura
+        self._load_mongodb_config()
+        
         # Registrar inicio de la aplicación
         logging.info(f"Iniciando aplicación con fuente de datos: {data_source}")
         
@@ -48,6 +46,23 @@ class App:
         else:
             # Mostrar selector de fuente de datos
             self.load_data()
+    
+    def _load_mongodb_config(self) -> None:
+        """Cargar configuración de MongoDB de forma segura desde config.py"""
+        try:
+            from config import MONGODB_CONFIG
+            self.mongodb_conn_string = MONGODB_CONFIG["connection_string"]
+            self.db_name = MONGODB_CONFIG["database_name"]
+            logging.info("Configuración de MongoDB cargada exitosamente")
+        except ImportError:
+            # Configuración por defecto si no existe config.py
+            self.mongodb_conn_string = "mongodb://localhost:27017/"
+            self.db_name = "PeasonFlow"
+            logging.warning("No se encontró config.py, usando configuración por defecto")
+        except Exception as e:
+            logging.error(f"Error al cargar configuración de MongoDB: {str(e)}")
+            self.mongodb_conn_string = "mongodb://localhost:27017/"
+            self.db_name = "PeasonFlow"
     
     def load_data(self) -> None:
         """Mostrar ventana de selección y carga de datos."""
@@ -202,8 +217,8 @@ class App:
             load_window.on_source_changed(None)  # Actualizar interfaz para mostrar opciones MongoDB
             
             # Configurar parámetros de conexión MongoDB predeterminados
-            load_window.mongodb_conn_string.set(self.MONGODB_CONN_STRING)
-            load_window.mongodb_database.set(self.DB_NAME)
+            load_window.mongodb_conn_string.set(self.mongodb_conn_string)
+            load_window.mongodb_database.set(self.db_name)
             
             # Ejecutar ventana de carga con configuración preestablecida
             load_window.run(self.on_data_loaded)

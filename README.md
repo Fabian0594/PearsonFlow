@@ -42,6 +42,49 @@ cd PearsonFlow
 pip install -r requirements.txt
 ```
 
+## 🔐 Configuración Segura (IMPORTANTE)
+
+**Para proteger tus credenciales de MongoDB, sigue estos pasos:**
+
+### Configuración Inicial de Credenciales
+
+1. **Copia el archivo de configuración de ejemplo:**
+   ```bash
+   cp config.example.py config.py
+   ```
+
+2. **Edita `config.py` con tus credenciales reales:**
+   ```python
+   MONGODB_CONFIG = {
+       "connection_string": "tu_cadena_de_conexion_mongodb",
+       "database_name": "tu_base_de_datos",
+       "default_collection": "tu_coleccion_por_defecto"
+   }
+   ```
+
+3. **¡IMPORTANTE!** El archivo `config.py` está excluido del control de versiones por seguridad.
+
+### Acceso Rápido y Seguro a MongoDB
+
+**Usa el script de acceso rápido (recomendado):**
+```bash
+python quick_mongodb_access.py
+```
+
+Este script:
+- ✅ Carga credenciales de forma segura
+- ✅ Lista colecciones disponibles
+- ✅ Permite seleccionar una colección interactivamente
+- ✅ Lanza PearsonFlow automáticamente
+
+### Scripts de Utilidad Seguros
+
+- **Verificar conexión:** `python test_mongodb_connection.py`
+- **Insertar datos de prueba:** `python insert_to_peasonflow.py`
+- **Verificar estado de la base de datos:** `python check_mongodb.py`
+
+📖 **Para más detalles de seguridad, consulta [SECURITY.md](SECURITY.md)**
+
 ## Estructura del Proyecto
 
 ```

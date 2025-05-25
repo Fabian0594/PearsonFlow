@@ -1,96 +1,112 @@
-from pymongo import MongoClient
+#!/usr/bin/env python3
+"""
+Script para insertar datos de prueba en MongoDB usando configuración segura
+"""
+
+import sys
 import pandas as pd
 import numpy as np
-import sys
+from datetime import datetime, timedelta
 
-def create_test_data():
-    """Crear datos de prueba para la colección de MongoDB"""
-    # Crear un DataFrame con datos aleatorios
+def load_config():
+    """Cargar configuración de MongoDB de forma segura"""
+    try:
+        from config import MONGODB_CONFIG
+        return MONGODB_CONFIG
+    except ImportError:
+        print("❌ Error: No se encontró el archivo config.py")
+        print("📝 Por favor, copia config.example.py como config.py y completa las credenciales")
+        sys.exit(1)
+
+def create_sample_data():
+    """Crear datos de muestra para insertar"""
+    print("📊 Generando datos de muestra...")
+    
+    # Generar datos de ejemplo
     np.random.seed(42)
-    df = pd.DataFrame({
-        'nombre': [f'Usuario{i}' for i in range(1, 51)],
-        'edad': np.random.randint(18, 65, 50),
-        'salario': np.random.randint(30000, 100000, 50),
-        'puntuacion': np.random.uniform(0, 10, 50).round(2),
-        'activo': np.random.choice([True, False], 50),
-        'fecha_registro': pd.date_range(start='2023-01-01', periods=50).strftime('%Y-%m-%d').tolist()
-    })
+    n_records = 100
+    
+    data = {
+        'id': range(1, n_records + 1),
+        'nombre': [f'Usuario_{i}' for i in range(1, n_records + 1)],
+        'edad': np.random.randint(18, 80, n_records),
+        'salario': np.random.normal(50000, 15000, n_records).round(2),
+        'departamento': np.random.choice(['IT', 'Ventas', 'Marketing', 'RRHH', 'Finanzas'], n_records),
+        'fecha_ingreso': [
+            (datetime.now() - timedelta(days=np.random.randint(30, 1825))).strftime('%Y-%m-%d')
+            for _ in range(n_records)
+        ],
+        'activo': np.random.choice([True, False], n_records, p=[0.8, 0.2]),
+        'puntuacion': np.random.uniform(1, 10, n_records).round(2)
+    }
+    
+    df = pd.DataFrame(data)
+    print(f"✅ Generados {len(df)} registros de muestra")
     return df
 
-def insert_to_mongodb():
-    """Insertar datos de prueba en MongoDB"""
+def insert_data_to_mongodb():
+    """Insertar datos en MongoDB usando configuración segura"""
+    # Cargar configuración
+    config = load_config()
+    conn_string = config["connection_string"]
+    db_name = config["database_name"]
+    collection_name = "datos_prueba"
+    
     try:
-        print("Intentando conectar a MongoDB Atlas...")
-        # Conectar a MongoDB Atlas
-        conn_string = "mongodb+srv://fabianhurtado:fabian0594@peasonflowdb.zvucsvh.mongodb.net/"
-        client = MongoClient(conn_string, serverSelectionTimeoutMS=5000)
+        from core.mongo_loader import MongoDBLoader
         
-        # Verificar la conexión
-        print("Verificando conexión...")
-        client.admin.command('ping')
-        print("¡Conexión exitosa a MongoDB Atlas!")
+        print(f"🔗 Conectando a MongoDB...")
+        print(f"📊 Base de datos: {db_name}")
+        print(f"📁 Colección: {collection_name}")
         
-        # Listar bases de datos
-        print("\nBases de datos disponibles:")
-        dbs = client.list_database_names()
-        for db_name in dbs:
-            print(f"- {db_name}")
-            
-        # Seleccionar la base de datos correcta
-        db_name = "PeasonFlow"
-        print(f"\nSeleccionando/creando base de datos: {db_name}")
-        db = client[db_name]
+        # Crear datos de muestra
+        df = create_sample_data()
         
-        # Crear una colección de prueba
-        collection_name = "datos_prueba"
-        print(f"Seleccionando/creando colección: {collection_name}")
-        collection = db[collection_name]
-        
-        # Crear datos de prueba
-        print("Generando datos de prueba...")
-        df = create_test_data()
-        
-        # Convertir DataFrame a lista de diccionarios
-        records = df.to_dict('records')
-        
-        # Eliminar la colección si ya existe
-        collection.drop()
-        print(f"Colección {collection_name} eliminada (si existía)")
-        
-        # Insertar los datos
-        print(f"Insertando {len(records)} documentos...")
-        result = collection.insert_many(records)
-        
-        # Mostrar resultado
-        print(f"\n¡Éxito! Se han insertado {len(result.inserted_ids)} documentos en la colección '{collection_name}'")
-        
-        # Mostrar un ejemplo de documento
-        print("\nEjemplo de documento:")
-        print(collection.find_one())
-        
-        # Listar colecciones para confirmar
-        collections = db.list_collection_names()
-        print(f"\nColecciones en {db_name}:")
-        for coll in collections:
-            count = db[coll].count_documents({})
-            print(f"- {coll} ({count} documentos)")
-        
-        # Cerrar conexión
-        client.close()
-        print("\nConexión cerrada")
-        
-    except Exception as e:
-        print(f"Error: {str(e)}", file=sys.stderr)
+        # Conectar y insertar datos
+        with MongoDBLoader() as loader:
+            if loader.connect(conn_string, db_name):
+                print("✅ Conexión exitosa")
+                
+                # Insertar datos
+                result = loader.save_dataframe_to_collection(df, collection_name)
+                
+                if result:
+                    print(f"✅ Datos insertados exitosamente en '{collection_name}'")
+                    print(f"📊 Total de registros: {len(df)}")
+                    
+                    # Verificar inserción
+                    collections = loader.list_collections()
+                    if collection_name in collections:
+                        print(f"✅ Colección '{collection_name}' creada/actualizada correctamente")
+                    
+                    return True
+                else:
+                    print("❌ Error al insertar datos")
+                    return False
+            else:
+                print("❌ No se pudo conectar a MongoDB")
+                return False
+                
+    except ImportError:
+        print("❌ Error: No se pudo importar MongoDBLoader")
         return False
-        
-    return True
+    except Exception as e:
+        print(f"❌ Error durante la inserción: {str(e)}")
+        return False
+
+def main():
+    """Función principal"""
+    print("📥 Inserción de Datos de Prueba - PearsonFlow")
+    print("=" * 50)
+    
+    success = insert_data_to_mongodb()
+    
+    if success:
+        print("\n🎉 ¡Proceso completado exitosamente!")
+        print("💡 Ahora puedes usar quick_mongodb_access.py para acceder a los datos")
+    else:
+        print("\n❌ El proceso falló. Revisa la configuración y vuelve a intentar.")
+        sys.exit(1)
 
 if __name__ == "__main__":
-    try:
-        success = insert_to_mongodb()
-        if success:
-            print("\n¡Datos insertados correctamente en PeasonFlow!")
-        else:
-            print("\nOcurrió un error al insertar los datos.")
-    except Exception as e:
-        print(f"Error inesperado: {str(e)}", file=sys.stderr) 
+    main() 

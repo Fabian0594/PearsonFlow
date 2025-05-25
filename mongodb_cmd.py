@@ -1,20 +1,38 @@
+#!/usr/bin/env python3
+"""
+Script de línea de comandos para interactuar con MongoDB usando configuración segura
+"""
+
 import sys
+import logging
 from pymongo import MongoClient
 import pandas as pd
 
+def load_config():
+    """Cargar configuración de MongoDB de forma segura"""
+    try:
+        from config import MONGODB_CONFIG
+        return MONGODB_CONFIG
+    except ImportError:
+        print("❌ Error: No se encontró el archivo config.py")
+        print("📝 Por favor, copia config.example.py como config.py y completa las credenciales")
+        sys.exit(1)
+
 def connect_to_mongodb():
     # URI de conexión
-    uri = "mongodb+srv://fabianhurtado:fabian0594@peasonflowdb.zvucsvh.mongodb.net/"
+    config = load_config()
+    uri = config["connection_string"]
+    db_name = config["database_name"]
     
     try:
         # Conectar a MongoDB
-        print("Conectando a MongoDB Atlas...")
+        print("🔗 Conectando a MongoDB...")
+        print(f"📊 Base de datos: {db_name}")
         client = MongoClient(uri)
         
         # Probar conexión
-        print("Verificando conexión...")
         client.admin.command('ping')
-        print("Conexión exitosa!")
+        print("✅ Conexión exitosa")
         
         # Listar bases de datos disponibles
         print("\nBases de datos disponibles:")
@@ -23,16 +41,23 @@ def connect_to_mongodb():
             print(f"- {db}")
         
         # Seleccionar base de datos
-        db_name = "PeasonFlow"
         db = client[db_name]
         
         # Listar colecciones
-        print(f"\nColecciones en {db_name}:")
+        print(f"\n📋 Colecciones disponibles ({len(db.list_collection_names())}) en {db_name}:")
         collections = db.list_collection_names()
         if collections:
-            for i, coll in enumerate(collections, 1):
-                count = db[coll].count_documents({})
-                print(f"{i}. {coll} ({count} documentos)")
+            for i, collection_name in enumerate(collections, 1):
+                collection = db[collection_name]
+                count = collection.count_documents({})
+                print(f"  {i}. {collection_name} ({count} documentos)")
+            
+            # Mostrar información adicional
+            print(f"\n📊 Información de la base de datos:")
+            stats = db.command("dbstats")
+            print(f"  • Tamaño: {stats.get('dataSize', 0) / 1024 / 1024:.2f} MB")
+            print(f"  • Índices: {stats.get('indexSize', 0) / 1024 / 1024:.2f} MB")
+            print(f"  • Colecciones: {stats.get('collections', 0)}")
             
             # Seleccionar una colección
             if len(collections) == 1:
@@ -106,13 +131,20 @@ def connect_to_mongodb():
         
         # Cerrar conexión
         client.close()
-        print("\nConexión cerrada")
+        print("\n👋 Conexión cerrada")
         
     except Exception as e:
-        print(f"Error: {e}")
-        return False
+        print(f"❌ Error: {str(e)}")
+        sys.exit(1)
     
     return True
 
+def main():
+    """Función principal del script"""
+    print("🔗 MongoDB Command Line Tool - PearsonFlow")
+    print("=" * 50)
+    
+    connect_to_mongodb()
+
 if __name__ == "__main__":
-    connect_to_mongodb() 
+    main() 

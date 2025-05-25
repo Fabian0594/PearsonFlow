@@ -84,18 +84,37 @@ class LoadWindow(CSVLoader):
         self.root.option_add("*Font", default_font)
 
     def init_variables(self):
-        """Inicializar variables."""
+        """Inicializar variables de la ventana."""
         self.message_var = StringVar()
         self.column_type_var = StringVar(value=self.TIPOS_DATOS[0])
         self.file_path_var = StringVar(value="Ningún archivo seleccionado")
         self.data_source_var = StringVar(value=self.FUENTES_DATOS[0])
         self.widgets = {}
         self.validation_status = {}
-        self.mongodb_conn_string = StringVar(value="mongodb+srv://fabianhurtado:fabian0594@peasonflowdb.zvucsvh.mongodb.net/")
-        self.mongodb_database = StringVar(value="PeasonFlow")
+        
+        # Cargar configuración de MongoDB de forma segura
+        self._load_mongodb_config()
+        
         self.mongodb_collection = StringVar(value="datos_prueba")
         self.validation_result_var = StringVar()  # Para mostrar resultados de validación
         self.data_identifier = None  # Para guardar la ruta del archivo o el ID de la conexión MongoDB
+
+    def _load_mongodb_config(self):
+        """Cargar configuración de MongoDB de forma segura desde config.py"""
+        try:
+            from config import MONGODB_CONFIG
+            self.mongodb_conn_string = StringVar(value=MONGODB_CONFIG["connection_string"])
+            self.mongodb_database = StringVar(value=MONGODB_CONFIG["database_name"])
+            logging.info("Configuración de MongoDB cargada en LoadWindow")
+        except ImportError:
+            # Configuración por defecto si no existe config.py
+            self.mongodb_conn_string = StringVar(value="mongodb://localhost:27017/")
+            self.mongodb_database = StringVar(value="PeasonFlow")
+            logging.warning("No se encontró config.py en LoadWindow, usando configuración por defecto")
+        except Exception as e:
+            logging.error(f"Error al cargar configuración de MongoDB en LoadWindow: {str(e)}")
+            self.mongodb_conn_string = StringVar(value="mongodb://localhost:27017/")
+            self.mongodb_database = StringVar(value="PeasonFlow")
 
     def create_widgets(self):
         """Crear los elementos de la ventana."""
@@ -207,9 +226,6 @@ class LoadWindow(CSVLoader):
             style="Primary.TButton"
         )
         self.widgets['connect_mongo_button'].pack(side="left", padx=(0, 10))
-        
-        # Establecer la URI predeterminada
-        self.mongodb_conn_string.set("mongodb+srv://fabianhurtado:fabian0594@peasonflowdb.zvucsvh.mongodb.net/")
         
         # Mensaje informativo
         ttk.Label(self.mongodb_frame, 

@@ -1,73 +1,58 @@
-from pymongo import MongoClient
+#!/usr/bin/env python3
+"""
+Script de prueba para verificar la conexión a MongoDB usando configuración segura
+"""
+
 import sys
+import logging
 
 def test_mongodb_connection():
-    """Test simple de conexión a MongoDB Atlas"""
+    """Probar la conexión a MongoDB usando configuración segura"""
     try:
-        # Conectar a MongoDB Atlas
-        print("Intentando conectar a MongoDB Atlas...")
-        conn_string = "mongodb+srv://fabianhurtado:fabian0594@peasonflowdb.zvucsvh.mongodb.net/"
-        client = MongoClient(conn_string, serverSelectionTimeoutMS=5000)
+        # Cargar configuración de forma segura
+        from config import MONGODB_CONFIG
+        conn_string = MONGODB_CONFIG["connection_string"]
+        db_name = MONGODB_CONFIG["database_name"]
         
-        # Verificar la conexión
-        print("Verificando conexión...")
-        client.admin.command('ping')
-        print("¡Conexión exitosa a MongoDB Atlas!")
+        print(f"🔗 Probando conexión a MongoDB...")
+        print(f"📊 Base de datos: {db_name}")
         
-        # Listar bases de datos
-        print("\nBases de datos disponibles:")
-        dbs = client.list_database_names()
-        for db_name in dbs:
-            print(f"- {db_name}")
+    except ImportError:
+        print("❌ Error: No se encontró el archivo config.py")
+        print("📝 Por favor, copia config.example.py como config.py y completa las credenciales")
+        return False
+    except Exception as e:
+        print(f"❌ Error al cargar configuración: {str(e)}")
+        return False
+    
+    try:
+        from core.mongo_loader import MongoDBLoader
         
-        # Verificar si existe la base de datos PeasonFlow
-        if "PeasonFlow" in dbs:
-            print("\nLa base de datos PeasonFlow existe")
-            db = client["PeasonFlow"]
+        # Crear loader y probar conexión
+        mongo_loader = MongoDBLoader()
+        
+        if mongo_loader.connect(conn_string, db_name):
+            print("✅ Conexión exitosa a MongoDB")
             
             # Listar colecciones
-            collections = db.list_collection_names()
-            if collections:
-                print("Colecciones disponibles:")
-                for coll in collections:
-                    print(f"- {coll}")
-            else:
-                print("No hay colecciones en PeasonFlow")
-                
-            # Crear colección de prueba
-            print("\nCreando colección de prueba...")
-            collection = db["test_collection"]
-            result = collection.insert_one({"test": "data", "value": 123})
-            print(f"Documento insertado con ID: {result.inserted_id}")
+            collections = mongo_loader.list_collections()
+            print(f"📋 Colecciones encontradas ({len(collections)}):")
+            for i, collection in enumerate(collections, 1):
+                print(f"  {i}. {collection}")
             
-            # Verificar que se haya creado
-            print("\nVerificando colecciones después de inserción:")
-            collections = db.list_collection_names()
-            for coll in collections:
-                print(f"- {coll}")
+            mongo_loader.close()
+            return True
         else:
-            print("\nLa base de datos PeasonFlow no existe")
-            print("Creando base de datos PeasonFlow...")
-            db = client["PeasonFlow"]
-            collection = db["test_collection"]
-            result = collection.insert_one({"test": "data", "value": 123})
-            print(f"Documento insertado con ID: {result.inserted_id}")
+            print("❌ No se pudo conectar a MongoDB")
+            return False
             
-            # Verificar que se haya creado
-            print("\nVerificando bases de datos después de inserción:")
-            dbs = client.list_database_names()
-            for db_name in dbs:
-                print(f"- {db_name}")
-        
-    except Exception as e:
-        print(f"Error al conectar a MongoDB Atlas: {e}", file=sys.stderr)
+    except ImportError:
+        print("❌ Error: No se pudo importar MongoDBLoader")
         return False
-    finally:
-        if 'client' in locals():
-            client.close()
-            print("\nConexión cerrada")
-    
-    return True
+    except Exception as e:
+        print(f"❌ Error durante la prueba: {str(e)}")
+        return False
 
 if __name__ == "__main__":
-    test_mongodb_connection() 
+    success = test_mongodb_connection()
+    sys.exit(0 if success else 1) 

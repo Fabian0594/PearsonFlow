@@ -36,24 +36,30 @@ class DataVisualizerGUI:
         
         # Cargar datos
         try:
-            # Determinar el tipo de fuente de datos
-            is_mongodb = isinstance(file_path, str) and file_path.startswith("mongodb://")
-            
-            if is_mongodb:
-                # Es una fuente MongoDB
+            # Determinar si es un archivo CSV o una conexión MongoDB
+            if isinstance(file_path, str) and file_path.startswith("mongodb://"):
+                # Es una conexión MongoDB
                 print(f"DataVisualizerGUI: Cargando datos desde MongoDB: {file_path}")
+                
+                # Parsear el identificador de MongoDB
                 parts = file_path.replace("mongodb://", "").split("/")
                 
-                if len(parts) < 2:
-                    raise ValueError(f"Formato de identificador MongoDB inválido: {file_path}")
-                
                 # Asegurarnos de usar el nombre correcto de la base de datos
-                db_name = "PeasonFlow"
+                db_name = parts[0] if len(parts) > 0 else "PeasonFlow"
                 collection_name = parts[1] if len(parts) > 1 else "datos_prueba"
                 
-                # La cadena de conexión debe estar almacenada en la configuración o en un archivo seguro
-                # Aquí usamos la URI de MongoDB Atlas proporcionada por el usuario
-                conn_string = "mongodb+srv://fabianhurtado:fabian0594@peasonflowdb.zvucsvh.mongodb.net/"
+                # Cargar configuración de MongoDB de forma segura
+                try:
+                    from config import MONGODB_CONFIG
+                    conn_string = MONGODB_CONFIG["connection_string"]
+                    print(f"DataVisualizerGUI: Usando configuración segura para MongoDB")
+                except ImportError:
+                    # Fallback a configuración local si no existe config.py
+                    conn_string = "mongodb://localhost:27017/"
+                    print(f"DataVisualizerGUI: Usando configuración por defecto (config.py no encontrado)")
+                except Exception as e:
+                    print(f"DataVisualizerGUI: Error al cargar configuración: {str(e)}")
+                    conn_string = "mongodb://localhost:27017/"
                 
                 # Cargar datos desde MongoDB
                 self.dataframe, self.metadata = self.data_repository.load_from_mongodb(conn_string, db_name, collection_name)
