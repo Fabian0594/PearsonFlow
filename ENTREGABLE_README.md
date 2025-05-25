@@ -173,5 +173,3 @@ Si tienes problemas compilando el documento:
 4. **Consulta** la documentación de LaTeX
 
 ---
-
-**¡Éxito en tu entrega! 🎓** 
