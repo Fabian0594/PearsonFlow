@@ -279,4 +279,4 @@ Este proyecto está licenciado bajo la Licencia MIT - vea el archivo LICENSE par
 
 ## Créditos
 
-Desarrollado como parte del proyecto PearsonFlow.
+Desarrollado como parte del proyecto PearsonFlow por Fabian Hurtado.
