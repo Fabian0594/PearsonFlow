@@ -29,16 +29,45 @@ class DataVisualizerGUI:
         Inicializar el visualizador de datos.
         
         Args:
-            file_path: Ruta al archivo CSV a visualizar
+            file_path: Ruta al archivo CSV o identificador de MongoDB a visualizar
         """
         # Inicializar repositorio de datos
         self.data_repository = DataRepository()
         
         # Cargar datos
         try:
-            self.dataframe, self.metadata = self.data_repository.load_csv(file_path)
+            # Determinar el tipo de fuente de datos
+            is_mongodb = isinstance(file_path, str) and file_path.startswith("mongodb://")
+            
+            if is_mongodb:
+                # Es una fuente MongoDB
+                print(f"DataVisualizerGUI: Cargando datos desde MongoDB: {file_path}")
+                parts = file_path.replace("mongodb://", "").split("/")
+                
+                if len(parts) < 2:
+                    raise ValueError(f"Formato de identificador MongoDB inválido: {file_path}")
+                
+                # Asegurarnos de usar el nombre correcto de la base de datos
+                db_name = "PeasonFlow"
+                collection_name = parts[1] if len(parts) > 1 else "datos_prueba"
+                
+                # La cadena de conexión debe estar almacenada en la configuración o en un archivo seguro
+                # Aquí usamos la URI de MongoDB Atlas proporcionada por el usuario
+                conn_string = "mongodb+srv://fabianhurtado:fabian0594@peasonflowdb.zvucsvh.mongodb.net/"
+                
+                # Cargar datos desde MongoDB
+                self.dataframe, self.metadata = self.data_repository.load_from_mongodb(conn_string, db_name, collection_name)
+            else:
+                # Es un archivo CSV
+                print(f"DataVisualizerGUI: Cargando datos desde CSV: {file_path}")
+                self.dataframe, self.metadata = self.data_repository.load_csv(file_path)
+            
             self.file_path = file_path
+            print(f"DataVisualizerGUI: Datos cargados correctamente: {len(self.dataframe)} filas, {len(self.dataframe.columns)} columnas")
         except Exception as e:
+            print(f"DataVisualizerGUI: Error al cargar los datos: {str(e)}")
+            import traceback
+            traceback.print_exc()
             raise ValueError(f"Error al cargar el archivo: {str(e)}")
         
         # Iniciar la interfaz
