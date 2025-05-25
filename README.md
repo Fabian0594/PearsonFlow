@@ -129,32 +129,37 @@ python main.py --file ruta/al/archivo.csv
 
 ### Cargar desde MongoDB
 
-#### **Comandos para acceder a MongoDB:**
+#### **🔐 Acceso Seguro a MongoDB (Recomendado):**
 
-**Opción 1: Comando directo con colección específica**
+**Opción 1: Script de acceso rápido (MÁS SEGURO)**
 ```bash
-python main.py --mongodb "mongodb+srv://fabianhurtado:fabian0594@peasonflowdb.zvucsvh.mongodb.net/;PeasonFlow;datos_prueba"
+# Configurar credenciales una sola vez
+cp config.example.py config.py
+# Editar config.py con tus credenciales
+
+# Usar acceso rápido
+python quick_mongodb_access.py
 ```
 
-**Opción 2: Comando para seleccionar colección (recomendado)**
-```bash
-python main.py --mongodb "mongodb+srv://fabianhurtado:fabian0594@peasonflowdb.zvucsvh.mongodb.net/;PeasonFlow;"
-```
-
-**Opción 3: Interfaz gráfica**
+**Opción 2: Interfaz gráfica**
 ```bash
 python main.py
 ```
 Luego:
 1. Selecciona "MongoDB" como fuente de datos
 2. Usa el botón "Ir a la base de datos de MongoDB" para acceso rápido
-3. O haz clic en "Conectar a MongoDB"
+3. O configura manualmente la conexión en la interfaz
 
-#### **Formato del parámetro MongoDB:**
-El formato es: `"uri;database;collection"` donde:
-- **uri**: `mongodb+srv://fabianhurtado:fabian0594@peasonflowdb.zvucsvh.mongodb.net/`
-- **database**: `PeasonFlow` (nombre de la base de datos)
-- **collection**: nombre de la colección (opcional, ej: `datos_prueba`)
+**Opción 3: Línea de comandos (requiere configuración previa)**
+```bash
+# Solo funciona después de configurar config.py
+python main.py --mongodb "config;PeasonFlow;datos_prueba"
+```
+
+#### **⚠️ Formato de Conexión:**
+- **Configuración segura**: Las credenciales se cargan desde `config.py`
+- **Base de datos**: `PeasonFlow` (nombre de la base de datos)
+- **Colección**: nombre de la colección (opcional, ej: `datos_prueba`)
 
 Si no se especifica la colección, se mostrará una interfaz para seleccionarla.
 
@@ -227,13 +232,18 @@ Este comando mostrará todas las bases de datos y colecciones disponibles en su 
 
 Si no puede conectarse a MongoDB:
 
-1. Verifique que el servidor de MongoDB esté en ejecución
-2. Compruebe que la URI de conexión, nombre de base de datos y colección sean correctos
-3. Asegúrese de tener permisos para acceder a la base de datos
-4. Verifique que pymongo esté instalado correctamente
-5. Active el modo de depuración para ver mensajes de error detallados:
+1. **Verifique la configuración segura**: Asegúrese de que `config.py` existe y contiene las credenciales correctas
+2. **Use el script de verificación**: Ejecute `python test_mongodb_connection.py` para verificar la conexión
+3. **Compruebe el estado de la base de datos**: Use `python check_mongodb.py` para ver colecciones disponibles
+4. **Verifique permisos**: Asegúrese de tener permisos para acceder a la base de datos
+5. **Instale dependencias**: Verifique que pymongo esté instalado correctamente
+6. **Active el modo de depuración** para ver mensajes de error detallados:
    ```bash
-   python main.py --debug --mongodb "uri;database;collection"
+   python main.py --debug
+   ```
+7. **Use el acceso rápido seguro**:
+   ```bash
+   python quick_mongodb_access.py
    ```
 
 ### Error al cargar archivos CSV
